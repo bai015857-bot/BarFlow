@@ -312,6 +312,11 @@ struct SettingsUITests {
                     guard let scroll = tabs.selectedTabViewItem?.view as? NSScrollView,
                           let document = scroll.documentView else { preconditionFailure("每页都应可以纵向滚动") }
                     precondition(!scroll.hasHorizontalScroller)
+                    // 旧式自动隐藏滚动条会在首轮排版后占用15点宽度。
+                    // 等待AppKit完成下一轮重排，再检查最终几何；不放宽断言。
+                    scroll.layoutSubtreeIfNeeded()
+                    RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.02))
+                    window.contentView!.layoutSubtreeIfNeeded()
                     let widthMatches = abs(document.frame.width - scroll.contentView.bounds.width) < 2
                     if !widthMatches {
                         print("LAYOUT_DIAGNOSTIC tab=\(tab) appearance=\(appearance.rawValue) requested=\(size) window=\(window.contentView!.bounds) document=\(document.frame) clipFrame=\(scroll.contentView.frame) clipBounds=\(scroll.contentView.bounds) scrollerStyle=\(scroll.scrollerStyle.rawValue) insets=\(scroll.contentInsets)")
