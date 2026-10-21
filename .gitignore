@@ -1,0 +1,13 @@
+.build/
+dist/
+.DS_Store
+*.log
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+*.p12
+*.mobileprovision
+docs/verification/
+docs/reviews/

@@ -1,0 +1,12 @@
+#!/bin/bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+build_root="${TMPDIR:-$PWD/.build/test-tmp}"
+mkdir -p "$build_root"
+build_dir="$(mktemp -d "${build_root%/}/barflow-side-button-tests.XXXXXX")"
+trap 'rm -rf "$build_dir"' EXIT
+shopt -s nullglob
+sources=(Sources/Core/SideButton*.swift Sources/App/SideButton*.swift)
+xcrun swiftc -swift-version 5 -warnings-as-errors "${sources[@]}" Tests/SideButtonTests.swift \
+  -framework AppKit -framework ApplicationServices -o "$build_dir/SideButtonTests"
+"$build_dir/SideButtonTests"

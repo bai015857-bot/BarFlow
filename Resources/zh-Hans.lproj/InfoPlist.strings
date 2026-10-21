@@ -1,0 +1,4 @@
+/* 简体中文应用显示信息。 */
+"CFBundleName" = "轻栏";
+"CFBundleDisplayName" = "轻栏";
+"NSHumanReadableCopyright" = "轻栏贡献者。已随附开源项目的许可证及致谢声明。";
