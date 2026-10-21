@@ -312,7 +312,12 @@ struct SettingsUITests {
                     guard let scroll = tabs.selectedTabViewItem?.view as? NSScrollView,
                           let document = scroll.documentView else { preconditionFailure("每页都应可以纵向滚动") }
                     precondition(!scroll.hasHorizontalScroller)
-                    precondition(abs(document.frame.width - scroll.contentView.bounds.width) < 2, "正文应随窗口横向收缩")
+                    let widthMatches = abs(document.frame.width - scroll.contentView.bounds.width) < 2
+                    if !widthMatches {
+                        print("LAYOUT_DIAGNOSTIC tab=\(tab) appearance=\(appearance.rawValue) requested=\(size) window=\(window.contentView!.bounds) document=\(document.frame) clipFrame=\(scroll.contentView.frame) clipBounds=\(scroll.contentView.bounds) scrollerStyle=\(scroll.scrollerStyle.rawValue) insets=\(scroll.contentInsets)")
+                        fflush(stdout)
+                    }
+                    precondition(widthMatches, "正文应随窗口横向收缩")
                     precondition(document.frame.height > 0 && !document.hasAmbiguousLayout)
                     for control in descendants(document).compactMap({ $0 as? NSControl }) {
                         precondition(!control.hasAmbiguousLayout, "内容控件不能有歧义布局：\((control as? NSTextField)?.stringValue ?? control.identifier?.rawValue ?? control.description)，\(control.frame)")
