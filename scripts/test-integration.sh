@@ -12,8 +12,8 @@ d=json.loads((root/'.build/diagnose.json').read_text())
 s=json.loads((root/'.build/smoke.json').read_text())
 assert d['app']=='BarFlow'
 info=plistlib.loads((root/'dist/BarFlow.app/Contents/Info.plist').read_bytes())
-assert d['version']==info['CFBundleShortVersionString']=='0.2.2'
-assert info['CFBundleVersion']=='5'
+assert d['version']==info['CFBundleShortVersionString']=='0.2.3'
+assert info['CFBundleVersion']=='8'
 assert info['CFBundleDisplayName']=='轻栏'
 assert info['CFBundleDevelopmentRegion']=='zh-Hans'
 assert info['CFBundleLocalizations']==['zh-Hans']

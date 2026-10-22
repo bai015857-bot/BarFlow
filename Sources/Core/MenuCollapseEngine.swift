@@ -71,8 +71,11 @@ final class MenuCollapseEngine {
         automaticTimer?.cancel()
         updateSeparator()
         setStatus("菜单栏已折叠")
-        safetyTimer = scheduler.schedule(after: 90, repeating: nil) { [weak self] in
-            self?.reveal(status: "已达到 90 秒安全时限，已自动展开；自动折叠已暂停。", suspendAutomatic: true)
+        // Time alone is not an unsafe layout. Keep the independent recovery check,
+        // but do not permanently pause healthy automatic hiding every 90 seconds.
+        safetyTimer = scheduler.schedule(after: 90, repeating: 90) { [weak self] in
+            guard let self = self, self.isCollapsed, self.driver.layout?.allowsCollapse != true else { return }
+            self.reveal(status: "安全复查发现恢复入口位置异常，已展开；请重新安排同屏左右位置。自动折叠已暂停。", suspendAutomatic: true)
         }
         layoutTimer = scheduler.schedule(after: 1, repeating: 1) { [weak self] in
             guard let self = self, self.isCollapsed, self.driver.layout?.allowsCollapse != true else { return }

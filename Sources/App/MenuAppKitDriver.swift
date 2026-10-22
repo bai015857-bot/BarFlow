@@ -54,17 +54,19 @@ final class MenuAppKitStatusItems: MenuStatusItemAccess {
     var separatorVisible: Bool {
         get { separator?.isVisible ?? false }
         set {
-            if newValue && separator == nil {
-                let item = NSStatusBar.system.statusItem(withLength: CGFloat(requestedLength))
-                item.autosaveName = Self.separatorIdentity
-                item.behavior = [] // The separator is not independently removable.
-                item.button?.identifier = NSUserInterfaceItemIdentifier(Self.separatorIdentity)
-                item.button?.title = "┆"
-                item.button?.toolTip = "轻栏分隔符：按住 ⌘ 拖到待隐藏图标右侧；轻栏图标须保持在此分隔符右侧。"
-                item.button?.setAccessibilityLabel("轻栏菜单栏分隔符")
-                separator = item
+            Self.withPreservedPlacement(visible: newValue) {
+                if newValue && separator == nil {
+                    let item = NSStatusBar.system.statusItem(withLength: CGFloat(requestedLength))
+                    item.autosaveName = Self.separatorIdentity
+                    item.behavior = [] // The separator is not independently removable.
+                    item.button?.identifier = NSUserInterfaceItemIdentifier(Self.separatorIdentity)
+                    item.button?.title = "┆"
+                    item.button?.toolTip = "轻栏分隔符：按住 ⌘ 拖到待隐藏图标右侧；轻栏图标须保持在此分隔符右侧。"
+                    item.button?.setAccessibilityLabel("轻栏菜单栏分隔符")
+                    separator = item
+                }
+                separator?.isVisible = newValue
             }
-            separator?.isVisible = newValue
         }
     }
 
@@ -82,10 +84,31 @@ final class MenuAppKitStatusItems: MenuStatusItemAccess {
                              anchorScreenID: anchorID.uint32Value)
     }
 
+    /// Keep the user's separator slot across AppKit hide/create/remove operations.
+    static func withPreservedPlacement(visible: Bool, defaults: UserDefaults = .standard,
+                                       _ operation: () -> Void) {
+        let positionKey = "NSStatusItem Preferred Position \(separatorIdentity)"
+        let visibleKey = "NSStatusItem Visible \(separatorIdentity)"
+        let previousPosition = (defaults.object(forKey: positionKey) as? NSNumber).flatMap { number -> NSNumber? in
+            guard CFGetTypeID(number) != CFBooleanGetTypeID(), number.doubleValue.isFinite,
+                  number.doubleValue >= 0 else { return nil }
+            return number
+        }
+        // A false autosaved visibility can make AppKit discard the saved slot
+        // while constructing the item, before the later isVisible=true setter.
+        if visible { defaults.set(true, forKey: visibleKey) }
+        operation()
+        if let previousPosition = previousPosition {
+            defaults.set(previousPosition, forKey: positionKey)
+        }
+    }
+
     func removeSeparator() {
         guard let item = separator else { return }
-        item.length = 20
-        NSStatusBar.system.removeStatusItem(item)
+        Self.withPreservedPlacement(visible: false) {
+            item.length = 20
+            NSStatusBar.system.removeStatusItem(item)
+        }
         separator = nil
         requestedLength = 20
     }

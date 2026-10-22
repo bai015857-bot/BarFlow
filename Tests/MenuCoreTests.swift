@@ -89,6 +89,40 @@ final class FakeMenuShortcut: MenuShortcutRegistering {
 @main
 struct MenuCoreTests {
     static func main() throws {
+        let clickDriver = FakeMenuDriver()
+        let clickClock = FakeMenuClock()
+        let clickController = MenuBarController(driver: clickDriver, scheduler: clickClock)
+        var clickPrefs = MenuPreferences()
+        clickPrefs.enabled = true
+        clickPrefs.autoCollapse = true
+        clickPrefs.autoCollapseDelay = 15
+        clickController.apply(clickPrefs)
+        expect(MenuStatusClickAction.resolve(eventType: .leftMouseUp, menuEnabled: true) == .toggle,
+               "left click on the menu icon must toggle instead of opening settings")
+        expect(MenuStatusClickAction.resolve(eventType: .rightMouseUp, menuEnabled: true) == .quickMenu,
+               "right click keeps the settings and recovery menu available")
+        expect(MenuStatusClickAction.resolve(eventType: .leftMouseUp, menuEnabled: false) == .settings,
+               "disabled menu module still allows settings through left click")
+        expect(MenuStatusClickAction.resolve(eventType: .rightMouseUp, menuEnabled: false) == .quickMenu,
+               "disabled menu module still allows the quick menu")
+        expect(MenuStatusClickAction.resolve(eventType: nil, menuEnabled: true) == .toggle,
+               "programmatic status button press uses the primary toggle action")
+        for expectedCollapsed in [true, false] {
+            if MenuStatusClickAction.resolve(eventType: .leftMouseUp, menuEnabled: true) == .toggle {
+                clickController.toggle()
+            }
+            expect(clickController.isCollapsed == expectedCollapsed,
+                   "successive icon clicks collapse then expand the real menu controller")
+            expect(clickDriver.length == (expectedCollapsed ? 5000 : 20),
+                   "icon clicks update the real separator width")
+        }
+        clickClock.advance(14.9)
+        expect(!clickController.isCollapsed, "icon expansion honors the user's 15-second delay")
+        clickClock.advance(0.1)
+        expect(clickController.isCollapsed, "icon expansion automatically recollapses at the configured delay")
+        clickController.cleanup()
+        print("PASS: status icon primary click expands/collapses, right click preserves menu, timed recollapse")
+
         let defaults = MenuPreferences()
         expect(!defaults.enabled, "menu hiding starts disabled")
         expect(defaults.autoCollapse, "automatic collapse preference defaults on")
@@ -168,6 +202,27 @@ struct MenuCoreTests {
         }
         print("PASS: automatic collapse and delay clamp")
 
+        // Regression: a healthy recovery anchor must not disable auto-collapse after 90 seconds.
+        let longLivedDriver = FakeMenuDriver()
+        let longLivedClock = FakeMenuClock()
+        let longLived = MenuCollapseEngine(driver: longLivedDriver, scheduler: longLivedClock)
+        var longLivedPrefs = prefs
+        longLivedPrefs.autoCollapse = true
+        longLivedPrefs.autoCollapseDelay = 5
+        longLived.apply(longLivedPrefs)
+        longLivedClock.advance(5)
+        expect(longLived.isCollapsed, "configured five-second delay collapses the menu")
+        longLivedClock.advance(300)
+        expect(longLived.isCollapsed && longLivedDriver.length == 5000,
+               "healthy layout stays collapsed beyond 90 seconds instead of silently pausing")
+        longLived.expand()
+        longLivedClock.advance(4.9)
+        expect(!longLived.isCollapsed, "manual expansion still waits for the user's delay")
+        longLivedClock.advance(0.1)
+        expect(longLived.isCollapsed, "automatic collapse still works after long uptime and expansion")
+        longLived.cleanup()
+        print("PASS: healthy menu does not permanently pause after 90 seconds")
+
         let safeDriver = FakeMenuDriver()
         let safeClock = FakeMenuClock()
         let safe = MenuCollapseEngine(driver: safeDriver, scheduler: safeClock)
@@ -177,15 +232,20 @@ struct MenuCoreTests {
         safe.apply(safePrefs)
         safe.toggle()
         safeClock.advance(89)
-        expect(safe.isCollapsed, "safety reveal does not fire early")
+        expect(safe.isCollapsed, "healthy layout remains collapsed before safety recheck")
+        // Simulate a missed fast watchdog: the independent 90-second check must
+        // still reveal an unsafe anchor, and apply must not postpone that check.
+        safeClock.timers.filter { $0.interval == 1 }.forEach { $0.cancel() }
+        safeDriver.layout = nil
         safe.apply(safePrefs)
         safeClock.advance(1)
-        expect(!safe.isCollapsed && safeDriver.length == 20, "90-second safety reveal cannot be reset by apply")
-        expect(safe.statusText.contains("90"), "safety reveal explains reason")
+        expect(!safe.isCollapsed && safeDriver.length == 20, "independent safety recheck reveals unsafe layout without being reset by apply")
+        expect(safe.statusText.contains("安全复查"), "safety recheck explains the geometry failure")
         safeClock.advance(200)
-        expect(!safe.isCollapsed, "safety reveal suspends automatic recollapse")
-        print("PASS: maximum safety reveal")
+        expect(!safe.isCollapsed, "unsafe safety recheck suspends automatic recollapse")
+        print("PASS: independent geometry-based safety recheck")
 
+        safeDriver.layout = valid
         safe.apply(safePrefs)
         safe.toggle()
         expect(safe.isCollapsed, "explicit request can collapse after safety recovery")
@@ -209,9 +269,12 @@ struct MenuCoreTests {
                     pausedClock.advance(1)
                     pausedDriver.layout = valid
                 } else {
+                    pausedClock.timers.filter { $0.interval == 1 }.forEach { $0.cancel() }
+                    pausedDriver.layout = nil
                     pausedClock.advance(90)
+                    pausedDriver.layout = valid
                 }
-                let recovery = layoutRecovery ? "layout recovery" : "90-second safety recovery"
+                let recovery = layoutRecovery ? "layout recovery" : "independent safety recheck"
                 expect(!paused.isCollapsed, "\(recovery) expands before preference updates")
 
                 paused.apply(safePrefs)
@@ -397,6 +460,47 @@ struct MenuCoreTests {
         carbonSuccess.unregister()
         expect(unregisteredKeys == 1, "Carbon cleanup unregisters key")
         print("PASS: native Carbon callback dispatch and cleanup")
+
+        let placementSuite = "BarFlowTests.MenuPlacement.\(UUID().uuidString)"
+        let placementDefaults = UserDefaults(suiteName: placementSuite)!
+        defer { placementDefaults.removePersistentDomain(forName: placementSuite) }
+        let positionKey = "NSStatusItem Preferred Position \(MenuAppKitStatusItems.separatorIdentity)"
+        let visibleKey = "NSStatusItem Visible \(MenuAppKitStatusItems.separatorIdentity)"
+        placementDefaults.set(329.0, forKey: positionKey)
+        placementDefaults.set(false, forKey: visibleKey)
+        placementDefaults.set("keep", forKey: "unrelated")
+        var operationRan = false
+        var creationSawVisible = false
+        MenuAppKitStatusItems.withPreservedPlacement(visible: true, defaults: placementDefaults) {
+            operationRan = true
+            creationSawVisible = placementDefaults.bool(forKey: visibleKey)
+            // AppKit removes Preferred Position when recreating a previously hidden item.
+            placementDefaults.removeObject(forKey: positionKey)
+        }
+        expect(operationRan, "placement wrapper performs exactly the intended native operation")
+        expect(creationSawVisible, "explicitly showing separator clears saved hidden state before AppKit creation")
+        expect(placementDefaults.double(forKey: positionKey) == 329,
+               "native recreation cannot erase the user's saved separator slot")
+        MenuAppKitStatusItems.withPreservedPlacement(visible: false, defaults: placementDefaults) {
+            placementDefaults.set(false, forKey: visibleKey)
+            placementDefaults.removeObject(forKey: positionKey)
+        }
+        expect(placementDefaults.double(forKey: positionKey) == 329,
+               "native hide/removal preserves the saved separator slot for the next launch")
+        expect(!placementDefaults.bool(forKey: visibleKey), "hide operation retains its visibility state")
+        expect(placementDefaults.string(forKey: "unrelated") == "keep", "placement preservation does not rewrite unrelated preferences")
+        placementDefaults.removeObject(forKey: positionKey)
+        MenuAppKitStatusItems.withPreservedPlacement(visible: true, defaults: placementDefaults) {}
+        expect(placementDefaults.object(forKey: positionKey) == nil, "no saved position means no invented positioning")
+        for malformedPosition: Any in ["not-a-position", true, -10.0, Double.nan, Double.infinity] {
+            placementDefaults.set(malformedPosition, forKey: positionKey)
+            MenuAppKitStatusItems.withPreservedPlacement(visible: false, defaults: placementDefaults) {
+                placementDefaults.removeObject(forKey: positionKey)
+            }
+            expect(placementDefaults.object(forKey: positionKey) == nil,
+                   "position preservation never resurrects malformed/negative/nonfinite positions")
+        }
+        print("PASS: saved separator placement survives native hidden-state recreation and removal")
 
         let items = FakeMenuStatusItems()
         let nativeKey = FakeMenuShortcut()

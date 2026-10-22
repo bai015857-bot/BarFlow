@@ -22,7 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.autosaveName = "BarFlow.Anchor"
         if let button = statusItem.button {
             button.image = NSImage(systemSymbolName: "rectangle.compress.vertical", accessibilityDescription: "轻栏")
-            button.toolTip = "轻栏：左键打开设置，右键打开快捷菜单"
+            button.toolTip = "轻栏：左键展开／收起，右键打开快捷菜单与设置"
             button.target = self
             button.action = #selector(statusClicked(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -131,8 +131,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func statusClicked(_ sender: Any?) {
-        if NSApp.currentEvent?.type == .rightMouseUp { openQuickMenu() }
-        else { showSettings() }
+        switch MenuStatusClickAction.resolve(eventType: NSApp.currentEvent?.type,
+                                             menuEnabled: preferences.menuEnabled) {
+        case .quickMenu: openQuickMenu()
+        case .toggle: toggleMenu()
+        case .settings: showSettings()
+        }
     }
 
     private func openQuickMenu() {
@@ -234,7 +238,7 @@ struct BarFlowMain {
     static func main() {
         if CommandLine.arguments.contains("--diagnose") {
             let defaults = AppPreferences()
-            let result: [String: Any] = ["app": "BarFlow", "version": "0.2.2", "architecture": "arm64",
+            let result: [String: Any] = ["app": "BarFlow", "version": "0.2.3", "architecture": "arm64",
                 "accessibility_trusted": AXIsProcessTrusted(), "scroll": ScrollEngine.diagnosticSnapshot(),
                 "side_buttons": SideButtonEngine.diagnosticSnapshot(),
                 "safe_defaults": ["menuEnabled": defaults.menuEnabled, "scrollEnabled": defaults.scrollEnabled,

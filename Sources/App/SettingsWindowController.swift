@@ -160,7 +160,7 @@ final class SettingsWindowController: NSWindowController {
         let sidebarFooter = vertical(spacing: 7)
         sidebarFooter.addArrangedSubview(label("曜石精密 · 跟随系统外观", size: 11, weight: .medium, color: SettingsPalette.accent))
         sidebarFooter.addArrangedSubview(label("本地处理 · 无遥测", size: 11, color: .secondaryLabelColor))
-        sidebarFooter.addArrangedSubview(label("版本 0.2.2", size: 11, color: .secondaryLabelColor))
+        sidebarFooter.addArrangedSubview(label("版本 0.2.3", size: 11, color: .secondaryLabelColor))
         sidebar.addSubview(sidebarFooter)
         NSLayoutConstraint.activate([
             sidebarFooter.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 22),
@@ -329,7 +329,7 @@ final class SettingsWindowController: NSWindowController {
     }
 
     private func aboutPane() -> NSView {
-        let (view, stack) = pane("关于与权限", subtitle: "轻栏 0.2.2 · 为日常操作减一点负担。")
+        let (view, stack) = pane("关于与权限", subtitle: "轻栏 0.2.3 · 为日常操作减一点负担。")
         add(card("card.about.primary", rows: [insetNote("原创菜单栏与滚动控制工具。所有处理在本机完成，不接入账户、云服务或统计。本软件为独立项目，非其他同类软件的官方版本。")]), to: stack)
         loginItemStatus.identifier = NSUserInterfaceItemIdentifier("loginItemStatus")
         controls["loginItemStatus"] = loginItemStatus
